@@ -1,6 +1,7 @@
 // @ts-check
-import { E } from '@endo/far';
+import { E, Far } from '@endo/far';
 import { AssetKind } from '@agoric/ertp';
+import { coerceDisplayInfo } from '@agoric/ertp/src/displayInfo.js';
 import { makePromiseKit } from '@endo/promise-kit';
 import { makeNameHubKit } from '../nameHub.js';
 
@@ -12,10 +13,13 @@ const mapEntries = (obj, f) =>
   // @ts-ignore entries() loses key type
   fromEntries(entries(obj).map(([p, v]) => f(p, v)));
 
-// TODO: phase out ./issuers.js
 export const CENTRAL_ISSUER_NAME = 'RUN';
 
-// We reserve these keys in name hubs.
+/**
+ * We reserve these keys in name hubs.
+ *
+ * @type {{ [P in keyof WellKnownName]: { [P2 in WellKnownName[P]]: string } }}
+ */
 export const agoricNamesReserved = harden({
   issuer: {
     BLD: 'Agoric staking token',
@@ -36,7 +40,7 @@ export const agoricNamesReserved = harden({
     VaultFactory: 'vault factory',
     liquidate: 'liquidate',
     getRUN: 'getRUN',
-    pegasus: 'pegasus',
+    Pegasus: 'pegasus',
   },
   instance: {
     economicCommittee: 'Economic Committee',
@@ -50,6 +54,9 @@ export const agoricNamesReserved = harden({
     getRUNGovernor: 'getRUN governor',
     Pegasus: 'remote peg',
   },
+  oracleBrand: {
+    USD: 'US Dollar',
+  },
   uiConfig: {
     VaultFactory: 'vault factory',
     Treasury: 'vault factory', // compatibility
@@ -62,6 +69,41 @@ export const feeIssuerConfig = {
   assetKind: AssetKind.NAT,
   displayInfo: { decimalPlaces: 6, assetKind: AssetKind.NAT },
 };
+
+/**
+ * @template {AssetKind} K
+ *
+ * Create a brand that cannot ever produce mints, issuers, payments or purses.
+ *
+ * The allegedName becomes part of the brand in asset descriptions. The
+ * allegedName doesn't have to be a string, but it will only be used for
+ * its value. The allegedName is useful for debugging and double-checking
+ * assumptions, but should not be trusted.
+ *
+ * The assetKind will be used to import a specific mathHelpers
+ * from the mathHelpers library. For example, natMathHelpers, the
+ * default, is used for basic fungible tokens.
+ *
+ *  `displayInfo` gives information to the UI on how to display the amount.
+ *
+ * @param {string} allegedName
+ * @param {K} [assetKind=AssetKind.NAT]
+ * @param {AdditionalDisplayInfo} [displayInfo={}]
+ * @returns {Brand<K>}
+ */
+export const makeInertBrand = (
+  allegedName,
+  assetKind = /** @type {K} */ (AssetKind.NAT),
+  displayInfo = harden({}),
+) => {
+  const cleanDisplayInfo = coerceDisplayInfo(harden(displayInfo), assetKind);
+  return Far(`${allegedName} brand`, {
+    getAllegedName: () => allegedName,
+    getDisplayInfo: () => cleanDisplayInfo,
+    isMyIssuer: async _issuer => false,
+  });
+};
+harden(makeInertBrand);
 
 /**
  * Wire up a remote between the comms vat and vattp.
